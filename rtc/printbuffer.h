@@ -1,0 +1,1 @@
+void printbuffer(void* buffer, int length, int interval);
