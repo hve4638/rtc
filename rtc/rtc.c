@@ -30,9 +30,9 @@ void rtc_close() {
     }
 }
 
-void rtc_readtime(struct rtc_time *time) {
+void rtc_readtime(struct tm *time) {
     ioctl_assert(rtc_fd, RTC_RD_TIME, time);    
 }
-void rtc_writetime(struct rtc_time *time) {
+void rtc_writetime(struct tm *time) {
     ioctl_assert(rtc_fd, RTC_SET_TIME, time);    
 }
