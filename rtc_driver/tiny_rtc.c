@@ -178,16 +178,22 @@ static void rtc_remove(struct i2c_client *client){
 }
 
 static struct i2c_device_id rtc_ids[] = {
-    { "tiny_rtc", 0 },
+    { "bq32000", 0 },
     { }
 };
 
 MODULE_DEVICE_TABLE(i2c, rtc_ids);
 
+static const __maybe_unused struct of_device_id bq32000_of_match[] = {
+	{ .compatible = "ti,bq32000" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, bq32000_of_match);
+
 static struct i2c_driver rtc_driver = {
     .driver = {
         .name = "tiny_rtc",
-        .owner = THIS_MODULE,
+        .of_match_table = of_match_ptr(bq32000_of_match),
     },
     .id_table = rtc_ids,
     .probe = rtc_probe,
