@@ -66,6 +66,10 @@
 #define BQ32000_TCHE_MASK 0x0F
 #define BQ32000_FTF_MASK 0x01
 
+#define I2C_M_WR 0
+
+static struct i2c_driver rtc_driver;
+
 static int bq32000_read(struct device *dev, uint8_t *buf, uint8_t subaddress, int count){
     //suggested
     
@@ -85,7 +89,7 @@ static int bq32000_read(struct device *dev, uint8_t *buf, uint8_t subaddress, in
 
     ret = i2c_transfer(client->adapter, msg, 2);
     if (ret != 2)
-        return -EIO;
+        return -1;
     return 0;
 }
 static int bq32000_write(struct device *dev, uint8_t *buf, uint8_t subaddress, int count){
@@ -101,21 +105,22 @@ static int bq32000_write(struct device *dev, uint8_t *buf, uint8_t subaddress, i
 
     ret = i2c_transfer(client->adapter, &msg, 1);
     if (ret != 1)
-        return -EIO;
+        return -1;
     return 0;
 }
 static int bq32000_rtc_read_time(struct device *dev, struct rtc_time *tm){
     // to do implement
-    
+    return 0;
 }
 static int bq32000_rtc_set_time(struct device *dev, struct rtc_time *tm){
     // to do implement
+    return 0;
 }
 static const struct rtc_class_ops bq32000_rtc_ops = {
     .read_time = bq32000_rtc_read_time,
     .set_time = bq32000_rtc_set_time
 };
-static void rtc_probe(struct i2c_client *client){
+static int rtc_probe(struct i2c_client *client){
     struct device *dev = &client->dev;
     struct rtc_device *rtc;
     uint8_t oscillator;
@@ -129,14 +134,15 @@ static void rtc_probe(struct i2c_client *client){
         * 0 Normal
         * 1 Stop
     */
-    if (bq32000_read(dev, &oscillator, BQ32000_REG_SECONDS, 1)):
-        return -EIO;
+    if (bq32000_read(dev, &oscillator, BQ32000_REG_SECONDS, 1)){
+        return -1;
+    }
     if (oscillator & BQ32000_STOP_MASK){
         /* Oscillator is stopped */
         /* Clear the STOP bit */
         oscillator = 0x00;
         if (bq32000_write(dev, &oscillator, BQ32000_REG_SECONDS, 1))
-            return -EIO;
+            return -1;
     }
 
     /* Check Oscillator Fail Flag */
@@ -150,21 +156,25 @@ static void rtc_probe(struct i2c_client *client){
         * 1 Failure detected
     */
     if (bq32000_read(dev, &oscillator, BQ32000_REG_MINUTES, 1))
-        return -EIO;
+        return -1;
     if (oscillator & BQ32000_OF_MASK){
         /* Oscillator has failed */
         /* Warning */
-        fprintf(stderr, "Oscillator has failed\n");
+        //fprintf doesn't work in kernel space
+        //fprintf(stderr, "Oscillator has failed\n");
     }
 
     rtc = devm_rtc_device_register(dev, rtc_driver.driver.name, &bq32000_rtc_ops, THIS_MODULE);
     i2c_set_clientdata(client, rtc);
-    fprintf(stderr, "tiny_rtc probed\n");
-    return 0
+    //fprintf doesn't work in kernel space
+    //fprintf(stderr, "tiny_rtc probed\n");
+    return 0;
 }
 static void rtc_remove(struct i2c_client *client){
-    fprintf(stderr, "tiny_rtc removed\n");
-    device_remove_file(&client->dev, *)
+    //fprintf doesn't work in kernel space
+    //fprintf(stderr, "tiny_rtc removed\n");
+    // temporary disable remove
+    //device_remove_file(&client->dev, *);
 }
 
 static struct i2c_device_id rtc_ids[] = {
