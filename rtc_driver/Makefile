@@ -1,0 +1,1 @@
+obj-m := tiny_rtc.o
