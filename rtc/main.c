@@ -5,106 +5,113 @@
 #include "rtc.h"
 #include "systime.h"
 #include "printbuffer.h"
+#define FLAG_ARGERROR   0x1
+#define FLAG_HELP       0x2
+#define FLAG_LOAD       0x4
+#define FLAG_STORE      0x8
+#define FLAG_TEST      0x10
 
-void catch_args(int argc, char *const* argv);
-void printtime(struct tm* time, const char* message);
-
-static int noflag = 1;
-
-void handle_int(int signum) {
-    printf("interrupt handle?\n");
+int is_sudo() {
+    return geteuid() == 0 ? 1 : 0;
 }
 
+int catch_args(int argc, char *const* argv);
+void show_clock();
+void printtime(struct tm* time);
+void show_help();
+void test();
 
-void setalarm() {
-    struct tm tm = { 0, };
-    tm.tm_sec = 5;
+void load_systime_from_rtc();
+void store_systime_to_rtc();
 
-    printf("alarm on\n");
-    rtc_uie_on();
-    // printf("alarm set\n");
-    // rtc_alarm_set(&tm);
-    //struct rtc_wkalrm wk = { 0, };
+int main(int argc, char *const* argv) {
+    int flags = catch_args(argc, argv);
 
-    //wk.enabled = 1;
-    //wk.time.tm_sec = 3;
-    //rtc_wkalarm_set(&wk);
-}
-
-void setinthandle() {
-    struct sigaction sa;
-    sa.sa_handler = &handle_int;
-    sa.sa_flags = 0;
-    sigemptyset(&sa.sa_mask);
-    if (sigaction(SIGALRM, &sa, NULL) == -1) {
-        perror("sigaction");
-        return;
+    if (flags & FLAG_ARGERROR) {
+        exit(-1);
+    }
+    else if (flags & FLAG_HELP) {
+        show_help();
+    }
+    else if (flags & FLAG_LOAD) {
+        load_systime_from_rtc();
+    }
+    else if (flags & FLAG_STORE) {
+        store_systime_to_rtc();
+    }
+    else {
+        show_clock();
     }
 
+    return 0;
 }
 
 void test() {
-    rtc_open();
-    printf("rtc open\n");
+    struct tm time = {};
 
-    // rtc_alarm_on();
-
-    setalarm();
-    
-    setinthandle();
-
-    printf("waiting...\n");
-    while (1) {
-        sleep(1);
-    }
-
-    // rtc_alarm_off();
-    
-    rtc_close();
-    printf("rtc close\n");
+    sys_gettime(&time);
+    time.tm_hour += 1;
+    sys_settime(&time);
 }
 
-int main(int argc, char *const* argv) {
-    test();
-    return 0;
-
-    struct tm systime = {};
-    struct tm rtctime = {};
+int catch_args(int argc, char *const* argv) {
+    int flags = 0x0;
     
-    catch_args(argc, argv);
-
-    printf("noflag : %d\n", noflag);
-
-    return 0;
-    sys_gettime(&systime);
-    printtime(&systime, "SYS Time");
-
-    rtc_open();
-
-    rtc_readtime(&rtctime);
-    printtime(&rtctime, "RTC Time");
-
-    rtc_close();
-    return 0;
-}
-
-void catch_args(int argc, char *const* argv) {
     int c;
-    while( (c = getopt(argc, argv, "r")) != -1) {
+    while( (c = getopt(argc, argv, "hls")) != -1) {
         switch(c) {
-            case 'r':
-                noflag = 0;
+            case 't':
+                flags |= FLAG_TEST;
+                break;
+            case 'h':
+                flags |= FLAG_HELP;
+                break;
+            case 's':
+                flags |= FLAG_STORE;
+                break;
+            case 'l':
+                flags |= FLAG_LOAD;
                 break;
             case '?':
-                fprintf(stderr, "Unknown flag : %c", optopt);
+                flags |= FLAG_ARGERROR;
+                fprintf(stderr, "Unknown flag : %c\n", optopt);
                 break;
         }
     }
+    return flags;
 }
 
-void printtime(struct tm* time, const char* message) {
-    printf("%s: %04d.%02d.%02d %02d:%02d:%02d\n",
-        message,
+void show_help() {
+    printf("Usage: rtc [arguments]\n");
+    printf("\n");
+    printf("Arguments:\n");
+    printf("  -h\t\tPrint help\n");
+    printf("  -l\t\tLoad System Time from RTC\n");
+    printf("  -s\t\tStore System Time to RTC\n");
+}
+
+void show_clock() {
+    struct tm systime = {};
+    struct tm rtctime = {};
+
+    sys_gettime(&systime);
+    printf("System Time\t");
+    printtime(&systime);
+
+    if (!is_sudo()) {
+        fprintf(stderr, "rtc: Cannot access the Hardware Clock\n");
+    }
+    else {
+        rtc_open();
+        rtc_readtime(&rtctime);
+        printf("RTC Time\t");
+        printtime(&rtctime);
+        rtc_close();
+    }
+}
+
+void printtime(struct tm* time) {
+    printf("%04d-%02d-%02d %02d:%02d:%02d\n",
         1900 + time->tm_year,
         1 + time->tm_mon,
         time->tm_mday,
@@ -114,3 +121,32 @@ void printtime(struct tm* time, const char* message) {
     );
 }
 
+void load_systime_from_rtc() {
+    struct tm time = {};
+
+    if (!is_sudo()) {
+        fprintf(stderr, "rtc: Cannot access the Hardware Clock\n");
+        exit(1);
+    }
+
+    rtc_open();
+    rtc_readtime(&time);
+    rtc_close();
+
+    sys_settime(&time);
+}
+
+void store_systime_to_rtc() {
+    struct tm time = {};
+
+    if (!is_sudo()) {
+        fprintf(stderr, "rtc: Cannot access the Hardware Clock\n");
+        exit(1);
+    }
+
+    sys_gettime(&time);
+
+    rtc_open();
+    rtc_writetime(&time);
+    rtc_close();
+}

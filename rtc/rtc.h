@@ -14,3 +14,4 @@ void rtc_alarm_on();
 void rtc_alarm_off();
 void rtc_wkalarm_set(struct rtc_wkalrm *);
 void rtc_wkalarm_read(struct rtc_wkalrm *);
+

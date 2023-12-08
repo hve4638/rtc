@@ -8,7 +8,6 @@ void sys_gettime(struct tm* tinfo) {
     struct tm *nowtm;
 
     gettimeofday(&now, NULL);
-    printf("%ld\n", now.tv_sec);
     nowtm = localtime(&now.tv_sec);
     *tinfo = *nowtm;
 }
@@ -19,7 +18,6 @@ void sys_settime(struct tm* tinfo) {
     
     sec = mktime(tinfo);
     settv.tv_sec = sec;
-    printf("%ld\n", sec);
 
     if (settimeofday(&settv ,NULL) < 0) {
         fprintf(stderr, "Permission Denied\n");
