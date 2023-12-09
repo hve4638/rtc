@@ -1,2 +1,5 @@
 *.o
+*.ko
+*.order
+*.symvers
 rtc/rtc

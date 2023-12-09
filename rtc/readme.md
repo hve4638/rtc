@@ -1,6 +1,12 @@
 # RTC Command
 
-## Usage
+## 빌드
+
+`make` 을 통해 자동으로 빌드를 수행합니다 
+
+크로스컴파일러를 사용하는경우 `CC=<CrossCompiler>`를 추가하십시오
+
+## 사용
 
 아무 인자도 지정하지 않았다면 시스템 시간과 RTC 시간을 표시합니다
 
@@ -137,5 +143,41 @@ void rtc_wkalarm_set(struct rtc_wkalrm *);
 void rtc_wkalarm_read(struct rtc_wkalrm *);
 ```
 
-- `ioctl`에서 제공하는 요청이라도 모든 RTC장치가 해당 요청을 수행할 수 있는 것은 아니다
-- `rtc`시간을 읽고 쓰는 요청은 모든 RTC에서 처리할 수 있다 ()
+- `ioctl`에서 제공하는 요청이라도 모든 RTC장치가 해당 요청을 수행할 수 있는 것은 아님
+- `rtc` 시간을 읽고 쓰는 요청은 모든 RTC에서 처리할 수 있음 (RTC_RD_TIME, RTC_SET_TIME)
+
+#### *rtc장치 열기*
+
+```c
+static const char* rtcnames[] = {
+    "/dev/rtc",
+    "/dev/rtc0",
+    "/dev/rtc1",
+    "/dev/rtc2",
+};
+
+void rtc_open_flag(int oflag) {
+    size_t length = sizeof(rtcnames)/sizeof(rtcnames[0]);
+
+    rtc_fd = -1;
+    for (int i = 0; i < length; i++) {
+        const char *fname = rtcnames[i];
+        
+        if (access(fname, F_OK) == 0) {
+            rtc_fd = open(fname, oflag);
+
+            if (rtc_fd >= 0) {
+                break;
+            }
+        }
+    }
+
+    if (rtc_fd < 0) {
+        fprintf(stderr, "Could not open rtc\n");
+        exit(-1);
+    }
+}
+```
+
+- `/dev/rtc`, `/dev/rtc0`, `/dev/rtc1`, `/dev/rtc2` 중 차례대로 사용할수 있는 rtc 장치를 선택해 사용합니다
+- 외부에 노출된 `rtc_open_ro()`, `rtc_open_rw()`
