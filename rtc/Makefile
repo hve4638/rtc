@@ -6,7 +6,7 @@ TARGET=rtc
 all: $(TARGET)
 $(TARGET): $(OBJS)
 
-main.o: main.c rtc.h printbuffer.h
+main.o: main.c rtc.h systime.h
 rtc.o: rtc.c rtc.h
 printbuffer.o: printbuffer.c printbuffer.h
 systime.o: systime.c systime.h

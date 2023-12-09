@@ -4,7 +4,6 @@
 #include <signal.h>
 #include "rtc.h"
 #include "systime.h"
-#include "printbuffer.h"
 #define FLAG_ARGERROR   0x1
 #define FLAG_HELP       0x2
 #define FLAG_LOAD       0x4
@@ -27,7 +26,10 @@ void store_systime_to_rtc();
 int main(int argc, char *const* argv) {
     int flags = catch_args(argc, argv);
 
-    if (flags & FLAG_ARGERROR) {
+    if (flags & FLAG_TEST) {
+        test();
+    }
+    else if (flags & FLAG_ARGERROR) {
         exit(-1);
     }
     else if (flags & FLAG_HELP) {
@@ -49,16 +51,23 @@ int main(int argc, char *const* argv) {
 void test() {
     struct tm time = {};
 
-    sys_gettime(&time);
-    time.tm_hour += 1;
-    sys_settime(&time);
+    time.tm_year = 2020 - 1900;
+    time.tm_mon = 6 - 1;
+    time.tm_mday = 8;
+    time.tm_hour = 12;
+    time.tm_min = 30;
+    time.tm_sec = 5;
+
+    rtc_open_rw();;
+    printtime(&time);
+    rtc_close();
 }
 
 int catch_args(int argc, char *const* argv) {
     int flags = 0x0;
     
     int c;
-    while( (c = getopt(argc, argv, "hls")) != -1) {
+    while( (c = getopt(argc, argv, "hlst")) != -1) {
         switch(c) {
             case 't':
                 flags |= FLAG_TEST;
@@ -102,7 +111,7 @@ void show_clock() {
         fprintf(stderr, "rtc: Cannot access the Hardware Clock\n");
     }
     else {
-        rtc_open();
+        rtc_open_ro();
         rtc_readtime(&rtctime);
         printf("RTC Time\t");
         printtime(&rtctime);
@@ -125,7 +134,7 @@ void load_systime_from_rtc() {
     struct tm time = {};
 
     if (!is_sudo()) {
-        fprintf(stderr, "rtc: Cannot access the Hardware Clock\n");
+        fprintf(stderr, "rtc: Permission Denied\n");
         exit(1);
     }
 
@@ -140,7 +149,7 @@ void store_systime_to_rtc() {
     struct tm time = {};
 
     if (!is_sudo()) {
-        fprintf(stderr, "rtc: Cannot access the Hardware Clock\n");
+        fprintf(stderr, "rtc: Permission Denied\n");
         exit(1);
     }
 

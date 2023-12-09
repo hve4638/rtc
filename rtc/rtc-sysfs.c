@@ -80,15 +80,19 @@ void rtcinit() {
 struct rtcdatetime currentdate() {
     struct rtcdatetime dt = { 0, };
 
+    // "/sys/class/rtc/rtc0/date" 경로의 파일을 읽는다
     FILE* file = openforce("/date", "r");
-    fscanf(file, "%s", buffer);
 
+    // YYYY-MM-DD 형식으로 날짜를 가져온다
+    fscanf(file, "%s", buffer);
+    
     dt.year = readint(buffer, 4);
     dt.month = readint(buffer+5, 2);
     dt.day = readint(buffer+8, 2);
 
     fclose(file);
     
+    // HH:mm:SS 형식으로 시간을 가져온다
     file = openforce("/time", "r");
     fscanf(file, "%s", buffer);
 

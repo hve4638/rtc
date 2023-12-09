@@ -2,6 +2,8 @@
 #include <time.h>
 
 void rtc_open();
+void rtc_open_rw();
+void rtc_open_ro();
 void rtc_close();
 void rtc_readtime(struct tm*);
 void rtc_writetime(struct tm*);
