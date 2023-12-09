@@ -9,6 +9,6 @@
 
 - [RTC Command 구현](https://github.com/hve4638/rtc/blob/main/rtc/readme.md)
 
-- RTC Driver 재구현
+- [RTC Driver 재구현](https://github.com/hve4638/rtc/blob/main/rtc_driver/readme.md)
 
 로컬의 경우 각 디렉토리 내 `readme.md`에서 확인할 수 있습니다
