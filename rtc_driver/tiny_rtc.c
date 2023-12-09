@@ -10,6 +10,7 @@
 #include <linux/miscdevice.h>
 #include <linux/uaccess.h>
 #include <linux/errno.h>
+#include <linux/bcd.h>
 
 // I2C Address on the Beagleplay board
 #define BQ32000_ADDR 0x68
@@ -62,7 +63,7 @@
 #define BQ32000_FT_MASK  0x40
 #define BQ32000_S_MASK 0x20
 #define BQ32000_CAL_MASK 0x10
-#define bq32000_TCH2_MASK 0x20
+#define BQ32000_TCH2_MASK 0x20
 #define BQ32000_TCFE_MASK 0x40
 #define BQ32000_TCHE_MASK 0x0F
 #define BQ32000_FTF_MASK 0x01
@@ -122,25 +123,31 @@ static int bq32000_rtc_read_time(struct device *dev, struct rtc_time *tm){
     ret = bq32000_read(dev, &regs, 0, sizeof(regs));
     if (ret)
         return ret;
-    tm->tm_sec = ((regs.seconds & BQ32000_SECONDS_MASK10) >> 4) * 10 + (regs.seconds & BQ32000_SECONDS_MASK1);
-    tm->tm_min = ((regs.minutes & BQ32000_MINUTES_MASK10) >> 4) * 10 + (regs.minutes & BQ32000_MINUTES_MASK1);
-    tm->tm_hour = ((regs.cent_hours & BQ32000_HOURS_MASK10) >> 4) * 10 + (regs.cent_hours & BQ32000_HOURS_MASK1);
-    tm->tm_mday = ((regs.date & BQ32000_DATE_MASK10) >> 4) * 10 + (regs.date & BQ32000_DATE_MASK1);
-    tm->tm_wday = regs.day & BQ32000_DAY_MASK;
-    tm->tm_mon = ((regs.month & BQ32000_MONTH_MASK10) >> 4) * 10 + (regs.month & BQ32000_MONTH_MASK1);
-    tm->tm_year = ((regs.years & BQ32000_YEARS_MASK10) >> 4) * 10 + (regs.years & BQ32000_YEARS_MASK1);
+    tm->tm_sec = bcd2bin(regs.seconds & BQ32000_SECONDS_MASK);
+	tm->tm_min = bcd2bin(regs.minutes & BQ32000_MINUTES_MASK); 
+	tm->tm_hour = bcd2bin(regs.cent_hours & BQ32000_HOURS_MASK);
+	tm->tm_mday = bcd2bin(regs.date);
+	tm->tm_wday = bcd2bin(regs.day) - 1;
+	tm->tm_mon = bcd2bin(regs.month) - 1;
+	tm->tm_year = bcd2bin(regs.years) +
+				((regs.cent_hours & BQ32000_CENT_MASK) ? 100 : 0);
     return ret;
 }
 static int bq32000_rtc_set_time(struct device *dev, struct rtc_time *tm){
     struct bq32000_regs regs;
 
-    regs.seconds = ((tm->tm_sec / 10) << 4) | (tm->tm_sec % 10);
-    regs.minutes = ((tm->tm_min / 10) << 4) | (tm->tm_min % 10);
-    regs.cent_hours = ((tm->tm_hour / 10) << 4) | (tm->tm_hour % 10);
-    regs.date = ((tm->tm_mday / 10) << 4) | (tm->tm_mday % 10);
-    regs.day = tm->tm_wday;
-    regs.month = ((tm->tm_mon / 10) << 4) | (tm->tm_mon % 10);
-    regs.years = ((tm->tm_year / 10) << 4) | (tm->tm_year % 10);
+    regs.seconds = bin2bcd(tm->tm_sec);
+	regs.minutes = bin2bcd(tm->tm_min);
+	regs.cent_hours = bin2bcd(tm->tm_hour) | BQ32000_CENT_EN_MASK;
+	regs.day = bin2bcd(tm->tm_wday + 1);
+	regs.date = bin2bcd(tm->tm_mday);
+	regs.month = bin2bcd(tm->tm_mon + 1);
+
+	if (tm->tm_year >= 100) {
+		regs.cent_hours |= BQ32000_CENT_MASK;
+		regs.years = bin2bcd(tm->tm_year - 100);
+	} else
+		regs.years = bin2bcd(tm->tm_year);
     return bq32000_write(dev, &regs, 0, sizeof(regs));
 }
 
