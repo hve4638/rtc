@@ -58,8 +58,8 @@ void test() {
     time.tm_min = 30;
     time.tm_sec = 5;
 
-    rtc_open_rw();;
-    printtime(&time);
+    rtc_open_rw();
+    rtc_writetime(&time);
     rtc_close();
 }
 

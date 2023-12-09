@@ -1,4 +1,4 @@
-CC=gcc
+CC=arch64-linux-gcc
 CFLAGS=-g -Wall
 OBJS=main.o rtc.o printbuffer.o systime.o rtc-sysfs.o
 TARGET=rtc
