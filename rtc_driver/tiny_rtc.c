@@ -9,6 +9,7 @@
 #include <linux/fs.h>
 #include <linux/miscdevice.h>
 #include <linux/uaccess.h>
+#include <linux/errno.h>
 
 // I2C Address on the Beagleplay board
 #define BQ32000_ADDR 0x68
@@ -61,18 +62,27 @@
 #define BQ32000_FT_MASK  0x40
 #define BQ32000_S_MASK 0x20
 #define BQ32000_CAL_MASK 0x10
-#define BQ32000_TCH2_MASK 0x20
+#define bq32000_TCH2_MASK 0x20
 #define BQ32000_TCFE_MASK 0x40
 #define BQ32000_TCHE_MASK 0x0F
 #define BQ32000_FTF_MASK 0x01
 
+#define BQ32000_TCFE BIT(6)
+
 #define I2C_M_WR 0
 
+struct bq32000_regs {
+    uint8_t seconds;
+    uint8_t minutes;
+    uint8_t cent_hours;
+    uint8_t day;
+    uint8_t date;
+    uint8_t month;
+    uint8_t years;
+};
 static struct i2c_driver rtc_driver;
 
-static int bq32000_read(struct device *dev, uint8_t *buf, uint8_t subaddress, int count){
-    //suggested
-    
+static int bq32000_read(struct device *dev, void *buf, uint8_t subaddress, int count){
     struct i2c_client *client = to_i2c_client(dev);
     struct i2c_msg msg[2];
     int ret;
@@ -92,34 +102,163 @@ static int bq32000_read(struct device *dev, uint8_t *buf, uint8_t subaddress, in
         return -1;
     return 0;
 }
-static int bq32000_write(struct device *dev, uint8_t *buf, uint8_t subaddress, int count){
-    //suggested
+static int bq32000_write(struct device *dev, void *buf, uint8_t subaddress, int count){
     struct i2c_client *client = to_i2c_client(dev);
-    struct i2c_msg msg;
+    uint8_t buffer[11];
     int ret;
 
-    msg.addr = client->addr;
-    msg.flags = I2C_M_WR;
-    msg.buf = buf;
-    msg.len = count + 1;
+    buffer[0] = subaddress;
+    memcpy(&buffer[1], buf, count);
 
-    ret = i2c_transfer(client->adapter, &msg, 1);
-    if (ret != 1)
+    ret = i2c_master_send(client, buffer, count + 1);
+    if (ret != count + 1)
         return -1;
     return 0;
 }
 static int bq32000_rtc_read_time(struct device *dev, struct rtc_time *tm){
-    // to do implement
-    return 0;
+    struct bq32000_regs regs;
+    int ret;
+
+    ret = bq32000_read(dev, &regs, 0, sizeof(regs));
+    if (ret)
+        return ret;
+    tm->tm_sec = ((regs.seconds & BQ32000_SECONDS_MASK10) >> 4) * 10 + (regs.seconds & BQ32000_SECONDS_MASK1);
+    tm->tm_min = ((regs.minutes & BQ32000_MINUTES_MASK10) >> 4) * 10 + (regs.minutes & BQ32000_MINUTES_MASK1);
+    tm->tm_hour = ((regs.cent_hours & BQ32000_HOURS_MASK10) >> 4) * 10 + (regs.cent_hours & BQ32000_HOURS_MASK1);
+    tm->tm_mday = ((regs.date & BQ32000_DATE_MASK10) >> 4) * 10 + (regs.date & BQ32000_DATE_MASK1);
+    tm->tm_wday = regs.day & BQ32000_DAY_MASK;
+    tm->tm_mon = ((regs.month & BQ32000_MONTH_MASK10) >> 4) * 10 + (regs.month & BQ32000_MONTH_MASK1);
+    tm->tm_year = ((regs.years & BQ32000_YEARS_MASK10) >> 4) * 10 + (regs.years & BQ32000_YEARS_MASK1);
+    return ret;
 }
 static int bq32000_rtc_set_time(struct device *dev, struct rtc_time *tm){
-    // to do implement
-    return 0;
+    struct bq32000_regs regs;
+
+    regs.seconds = ((tm->tm_sec / 10) << 4) | (tm->tm_sec % 10);
+    regs.minutes = ((tm->tm_min / 10) << 4) | (tm->tm_min % 10);
+    regs.cent_hours = ((tm->tm_hour / 10) << 4) | (tm->tm_hour % 10);
+    regs.date = ((tm->tm_mday / 10) << 4) | (tm->tm_mday % 10);
+    regs.day = tm->tm_wday;
+    regs.month = ((tm->tm_mon / 10) << 4) | (tm->tm_mon % 10);
+    regs.years = ((tm->tm_year / 10) << 4) | (tm->tm_year % 10);
+    return bq32000_write(dev, &regs, 0, sizeof(regs));
 }
+
+static int trickle_charger_of_init(struct device *dev, struct device_node *node)
+{
+	unsigned char reg;
+	int error;
+	u32 ohms = 0;
+
+	if (of_property_read_u32(node, "trickle-resistor-ohms" , &ohms))
+		return 0;
+
+	switch (ohms) {
+	case 180+940:
+		/*
+		 * TCHE[3:0] == 0x05, TCH2 == 1, TCFE == 0 (charging
+		 * over diode and 940ohm resistor)
+		 */
+
+		if (of_property_read_bool(node, "trickle-diode-disable")) {
+			dev_err(dev, "diode and resistor mismatch\n");
+			return -EINVAL;
+		}
+		reg = 0x05;
+		break;
+
+	case 180+20000:
+		/* diode disabled */
+
+		if (!of_property_read_bool(node, "trickle-diode-disable")) {
+			dev_err(dev, "bq32000: diode and resistor mismatch\n");
+			return -EINVAL;
+		}
+		reg = 0x45;
+		break;
+
+	default:
+		dev_err(dev, "invalid resistor value (%d)\n", ohms);
+		return -EINVAL;
+	}
+
+	error = bq32000_write(dev, &reg, BQ32000_REG_CFG2, 1);
+	if (error)
+		return error;
+
+	reg = 0x20;
+	error = bq32000_write(dev, &reg, BQ32000_REG_TCH2, 1);
+	if (error)
+		return error;
+
+	dev_info(dev, "Enabled trickle RTC battery charge.\n");
+	return 0;
+}
+
+static ssize_t bq32000_sysfs_show_tricklecharge_bypass(struct device *dev,
+					       struct device_attribute *attr,
+					       char *buf)
+{
+	int reg, error;
+
+	error = bq32000_read(dev, &reg, BQ32000_REG_CFG2, 1);
+	if (error)
+		return error;
+
+	return sprintf(buf, "%d\n", (reg & BQ32000_TCFE) ? 1 : 0);
+}
+
+static ssize_t bq32000_sysfs_store_tricklecharge_bypass(struct device *dev,
+						struct device_attribute *attr,
+						const char *buf, size_t count)
+{
+	int reg, enable, error;
+
+	if (kstrtoint(buf, 0, &enable))
+		return -EINVAL;
+
+	error = bq32000_read(dev, &reg, BQ32000_REG_CFG2, 1);
+	if (error)
+		return error;
+
+	if (enable) {
+		reg |= BQ32000_TCFE;
+		error = bq32000_write(dev, &reg, BQ32000_REG_CFG2, 1);
+		if (error)
+			return error;
+
+		dev_info(dev, "Enabled trickle charge FET bypass.\n");
+	} else {
+		reg &= ~BQ32000_TCFE;
+		error = bq32000_write(dev, &reg, BQ32000_REG_CFG2, 1);
+		if (error)
+			return error;
+
+		dev_info(dev, "Disabled trickle charge FET bypass.\n");
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR(trickle_charge_bypass, 0644,
+		   bq32000_sysfs_show_tricklecharge_bypass,
+		   bq32000_sysfs_store_tricklecharge_bypass);
+
 static const struct rtc_class_ops bq32000_rtc_ops = {
     .read_time = bq32000_rtc_read_time,
     .set_time = bq32000_rtc_set_time
 };
+
+static int bq32000_sysfs_register(struct device *dev)
+{
+	return device_create_file(dev, &dev_attr_trickle_charge_bypass);
+}
+
+static void bq32000_sysfs_unregister(struct device *dev)
+{
+	device_remove_file(dev, &dev_attr_trickle_charge_bypass);
+}
+
 static int rtc_probe(struct i2c_client *client){
     struct device *dev = &client->dev;
     struct rtc_device *rtc;
